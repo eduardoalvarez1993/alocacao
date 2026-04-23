@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Timeline de Alocação</title>
+  <style>
+    :root {
+      --bg:#f5f7fb;--panel:#fff;--line:#e6ebf2;--line2:#eef2f7;--text:#1f2937;--muted:#6b7280;
+      --primary:#2563eb;--primary-weak:#dbeafe;--shadow:0 10px 30px rgba(15,23,42,.08);--radius:14px;
+      --head-h:52px;--cell-w-week:84px;--cell-w-day:42px;--row-h:54px;--sidebar-w:240px;
+    }
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .app{padding:20px;max-width:1600px;margin:0 auto}
+    .topbar{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap}
+    .titlebox h1{margin:0;font-size:22px}.titlebox p{margin:4px 0 0;color:var(--muted);font-size:13px}
+    .actions,.filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .panel{background:var(--panel);border:1px solid var(--line2);border-radius:var(--radius);box-shadow:var(--shadow)}
+    .toolbar{padding:14px;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+    .field{display:flex;flex-direction:column;gap:6px}.field label{font-size:12px;color:var(--muted);font-weight:600}
+    select,input,button,textarea{font:inherit}
+    select,input,textarea{height:40px;border:1px solid var(--line);background:#fff;border-radius:10px;padding:0 12px;min-width:160px;color:var(--text)}
+    textarea{height:90px;padding:10px 12px;resize:vertical}
+    button{height:40px;border:0;border-radius:10px;padding:0 14px;cursor:pointer;font-weight:600}
+    .btn-primary{background:var(--primary);color:#fff}.btn-soft{background:#fff;border:1px solid var(--line)}.btn-ghost{background:#f8fafc;border:1px solid var(--line)}.btn-danger{background:#dc2626;color:#fff}
+    .timeline-wrap{overflow:auto;position:relative}
+    .timeline{min-width:900px}
+    .header-row,.person-row{display:grid;grid-template-columns:var(--sidebar-w) 1fr}
+    .person-row{cursor:grab;position:relative}
+    .person-row.dragging{opacity:.5}
+    .person-row.drop-before::before,
+    .person-row.drop-after::after{content:'';position:absolute;left:0;right:0;height:3px;background:rgba(37,99,235,.85);z-index:5}
+    .person-row.drop-before::before{top:0}
+    .person-row.drop-after::after{bottom:0}
+    .sticky-left{position:sticky;left:0;z-index:4;background:var(--panel);border-right:1px solid var(--line2)}
+    .head-left{height:var(--head-h);display:flex;align-items:center;padding:0 16px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+    .head-grid{position:relative;height:var(--head-h);display:grid;border-bottom:1px solid var(--line2)}
+    .head-cell{display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);border-right:1px solid var(--line2);padding:0 6px;text-align:center;background:linear-gradient(#fff,#fcfdff)}
+    .head-cell.weekend {  background: #f1f5f9;  color: #94a3b8;}
+    .head-cell.current{background:#dbeafe;color:#1e40af;font-weight:700}
+    .person-meta{min-height:var(--row-h);display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--line2);font-weight:600;cursor:grab}
+    .person-meta:active{cursor:grabbing}
+    .grid-row{position:relative;min-height:var(--row-h);border-bottom:1px solid var(--line2);background:
+      linear-gradient(to right,var(--line2) 1px,transparent 1px) 0 0/var(--cell-size) 100%,
+      linear-gradient(#fff,#fff)}
+    .grid-row .row-highlight{position:absolute;top:0;bottom:0;pointer-events:none;background:rgba(37,99,235,.08);}
+    .bar{position:absolute;height:34px;top:10px;border-radius:10px;color:#fff;padding:0 10px;display:flex;align-items:center;font-size:12px;font-weight:700;box-shadow:0 6px 16px rgba(15,23,42,.16);cursor:grab;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1px solid rgba(255,255,255,.18)}
+    .bar.moving{cursor:grabbing}
+    .bar.resizing{cursor:ew-resize}
+    .bar small{font-size:11px;opacity:.9;margin-left:8px;font-weight:600}
+    .resize-handle{
+  position:absolute;
+  top:0;
+  right:0;
+  width:10px;
+  height:100%;
+  cursor:ew-resize;
+  touch-action:none;
+}
+    .resize-handle::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:2px;height:16px;background:rgba(255,255,255,.95);border-radius:1px}
+    .bar.resizing{opacity:.88}
+    .empty{padding:28px;text-align:center;color:var(--muted)}
+    .legend{display:flex;gap:8px;flex-wrap:wrap}.chip{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;background:#fff;border:1px solid var(--line2);font-size:12px}.dot{width:10px;height:10px;border-radius:999px;display:inline-block}
+    .modal{position:fixed;inset:0;background:rgba(15,23,42,.42);display:none;align-items:center;justify-content:center;padding:18px;z-index:100}.modal.open{display:flex}
+    .dialog{width:min(640px,100%);background:#fff;border-radius:18px;box-shadow:var(--shadow);overflow:hidden}.dialog-head{padding:18px 20px;border-bottom:1px solid var(--line2);display:flex;justify-content:space-between;align-items:center}.dialog-head h3{margin:0;font-size:18px}.dialog-body{padding:18px 20px;display:grid;grid-template-columns:1fr 1fr;gap:14px}.dialog-body .full{grid-column:1/-1}.dialog-foot{padding:18px 20px;border-top:1px solid var(--line2);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .msg{font-size:12px;color:#dc2626;min-height:16px}.muted{color:var(--muted)}
+    .label-toggle-wrap{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  padding:8px 12px;
+  border:1px solid var(--line2);
+  border-radius:999px;
+  background:#fff;
+}
+
+.label-toggle-text{
+  font-size:12px;
+  color:var(--muted);
+  font-weight:600;
+}
+
+.switch{
+  position:relative;
+  display:inline-block;
+  width:44px;
+  height:24px;
+}
+
+.switch input{
+  opacity:0;
+  width:0;
+  height:0;
+  position:absolute;
+}
+
+.slider{
+  position:absolute;
+  inset:0;
+  cursor:pointer;
+  background:#cbd5e1;
+  border-radius:999px;
+  transition:.2s ease;
+}
+
+.slider:before{
+  content:'';
+  position:absolute;
+  width:18px;
+  height:18px;
+  left:3px;
+  top:3px;
+  background:#fff;
+  border-radius:50%;
+  box-shadow:0 1px 4px rgba(15,23,42,.18);
+  transition:.2s ease;
+}
+
+.switch input:checked + .slider{
+  background:var(--primary);
+}
+
+.switch input:checked + .slider:before{
+  transform:translateX(20px);
+}
+    @media (max-width:900px){:root{--sidebar-w:180px}.dialog-body{grid-template-columns:1fr}.topbar,.toolbar{align-items:stretch}.actions,.filters{width:100%}.filters .field,.actions button{flex:1}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="titlebox">
+        <h1>Timeline de Alocação</h1>
+        <p>Visão clean por pessoa, projeto, escopo e período. Dados compartilhados na nuvem via Firebase.</p>
+      </div>
+      <div class="actions">
+        <button class="btn-soft" id="prevRange">← 3 meses</button>
+        <button class="btn-soft" id="nextRange">3 meses →</button>
+        <button class="btn-soft" id="todayBtn">Hoje</button>
+        <button class="btn-ghost" id="toggleMode">Modo: Semana</button>
+        <button class="btn-primary" id="addBtn">+ Novo registro</button>
+      </div>
+    </div>
+
+    <div class="panel toolbar">
+      <div class="filters">
+        <div class="field">
+          <label>Pessoa</label>
+          <select id="personFilter"></select>
+        </div>
+        <div class="field">
+          <label>Projeto</label>
+          <select id="projectFilter"></select>
+        </div>
+      </div>
+      <div class="label-toggle-wrap">
+        <span class="label-toggle-text">Label</span>
+        <label class="switch">
+            <input id="labelToggle" type="checkbox" checked />
+            <span class="slider"></span>
+        </label>
+    </div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="panel timeline-wrap">
+      <div class="timeline" id="timeline"></div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="dialog">
+      <div class="dialog-head">
+        <h3 id="modalTitle">Novo registro</h3>
+        <button class="btn-soft" id="closeModal">Fechar</button>
+      </div>
+      <div class="dialog-body">
+        <div class="field">
+          <label>Pessoa</label>
+          <select id="fPerson"></select>
+        </div>
+        <div class="field">
+          <label>Projeto</label>
+          <select id="fProject"></select>
+        </div>
+        <div class="field">
+          <label>Início</label>
+          <input id="fStart" type="date" />
+        </div>
+        <div class="field">
+          <label>Fim</label>
+          <input id="fEnd" type="date" />
+        </div>
+        <div class="field full">
+          <label>Escopo</label>
+          <textarea id="fScope" placeholder="Descreva o escopo"></textarea>
+        </div>
+        <div class="full msg" id="formMsg"></div>
+      </div>
+      <div class="dialog-foot">
+        <div>
+          <button class="btn-danger" id="deleteBtn" style="display:none">Excluir</button>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn-soft" id="cancelBtn">Cancelar</button>
+          <button class="btn-primary" id="saveBtn">Salvar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+    // TODO: Add SDKs for Firebase products that you want to use
+    // https://firebase.google.com/docs/web/setup#available-libraries
+
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+      apiKey: "SUA_API_KEY",
+      authDomain: "SEU_PROJETO.firebaseapp.com",
+      projectId: "SEU_PROJETO",
+      storageBucket: "SEU_PROJETO.appspot.com",
+      messagingSenderId: "SUA_MESSAGING_SENDER_ID",
+      appId: "SUA_APP_ID"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const firestore = getFirestore(app);
+
+    const SETTINGS_KEY = 'timeline_alocacao_settings_v1';
+
+    const mockPeople = [
+      {id: 'caio-cesar', name: 'Caio Cesar Gadelha Moreira Goncalves'},
+      {id: 'lucas-massaru', name: 'Lucas Massaru Arashida Lino'},
+      {id: 'mateus-santos', name: 'Mateus Santos De Paula'},
+      {id: 'felipe-assem', name: 'Felipe Assem Miconi'},
+      {id: 'vilson-oga', name: 'Vilson Oga Junior'},
+      {id: 'ricardo-santos', name: 'Ricardo Santos Goncalves'},
+      {id: 'luiz-henrique', name: 'Luiz Henrique Bazzano Mikoanski'},
+      {id: 'eduarda-larissa', name: 'Eduarda Larissa de Paula Lopretto'},
+      {id: 'aline-oliveira', name: 'Aline De Oliveira Silva'},
+      {id: 'vanessa-sayuri', name: 'Vanessa Sayuri Uchida'},
+      {id: 'lucas-barboza', name: 'Lucas Barboza Garcia'},
+      {id: 'lucas-ferreira', name: 'Lucas Ferreira Cardoso'},
+      {id: 'mirela-gadelha', name: 'Mirela Gadelha'},
+      {id: 'jhonatan', name: 'Jhonattan Vinicios De Oliveira Gomes'},
+      {id: 'marcos', name: 'Marcos Andrade Oliveira Junior'},
+      {id: 'saulo', name: 'Saulo Paiva Pereira'},
+      {id: 'vini', name: 'Vinicius Augusto Rodrigues'},
+      {id: 'gabriel', name: 'Gabriel Ferreira Cardoso'},
+      {id: 'edu', name: 'Eduardo Silva Perez Alvarez'}
+    ];
+
+    const projectPalette = {
+      'VALIA':'#2563eb',
+      'SANEPAR':'#059669',
+      'HONDA':'#d3241c',
+      'FÉRIAS':'#321337',
+    };
+
+    const defaultData = {
+      people: mockPeople,
+      projects: Object.keys(projectPalette),
+      projectColors: projectPalette,
+      records: [
+        {id:id(), person:'caio-cesar', start:offsetDate(-8), end:offsetDate(10), scope:'Operação assistida', project:'VALIA'},
+        {id:id(), person:'lucas-massaru', start:offsetDate(-18), end:offsetDate(20), scope:'Integração de APIs', project:'HONDA'},
+        {id:id(), person:'mateus-santos', start:offsetDate(5), end:offsetDate(35), scope:'Pacote 1', project:'VALIA'},
+        {id:id(), person:'felipe-assem', start:offsetDate(-2), end:offsetDate(45), scope:'Discovery e planejamento', project:'SANEPAR'},
+        {id:id(), person:'vilson-oga', start:offsetDate(16), end:offsetDate(28), scope:'Sustentação', project:'VALIA'}
+      ]
+    };
+
+    const defaultSettings = 
+    { mode:'week', offsetMonths:0, personFilter:'', projectFilter:'',  showProjectLabel: true
+ };
+
+    let db = defaultData; // Carregará do arquivo
+    let settings = loadLocal(SETTINGS_KEY, defaultSettings);
+    settings.personFilter = '';
+    let editingId = null;
+    let barInteraction = null;
+    let draggingPersonId = null;
+    let dropPosition = 'after';
+
+    // Carregar dados compartilhados em tempo real
+    onSnapshot(doc(firestore, 'timeline', 'data'), (docSnap) => {
+      if (docSnap.exists()) {
+        db = docSnap.data();
+      } else {
+        db = defaultData;
+      }
+      normalizeData();
+      refreshAll();
+    });
+
+    normalizeData();
+
+    function normalizeData(){
+      db.people = (db.people||[]).map(p => typeof p === 'string' ? {id:slug(p), name:p} : p);
+      const mockPeopleByName = new Map(mockPeople.map(p=>[p.name, p]));
+      const mockPeopleById = new Map(mockPeople.map(p=>[p.id, p]));
+      db.people = db.people.map(p => {
+        const byName = mockPeopleByName.get(p.name);
+        const byId = mockPeopleById.get(p.id);
+        if(byName) return byName;
+        if(byId) return byId;
+        return p;
+      });
+      const byName = new Map(db.people.map(p=>[p.name,p.id]));      db.records = (db.records||[]).map(r => {
+        if(!r.person) return r;
+        if(typeof r.person === 'object' && r.person !== null && 'id' in r.person) return {...r, person:String(r.person.id)};
+        if(typeof r.person === 'string'){
+          if(db.people.some(p=>p.id===r.person)) return r;
+          const match = db.people.find(p=>p.name===r.person);
+          return {...r, person: match ? match.id : slug(r.person)};
+        }
+        return {...r, person: slug(String(r.person))};
+      });
+    }
+
+    function slug(text){ return text.toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,''); }
+
+    function getPersonName(id){ const person = db.people.find(p=>p.id===id); return person? person.name : id; }
+
+    const els = {
+      timeline: q('#timeline'), legend:q('#legend'), modal:q('#modal'), modalTitle:q('#modalTitle'), formMsg:q('#formMsg'),
+      personFilter:q('#personFilter'), projectFilter:q('#projectFilter'), toggleMode:q('#toggleMode'),
+      fPerson:q('#fPerson'), fProject:q('#fProject'), fStart:q('#fStart'), fEnd:q('#fEnd'), fScope:q('#fScope'), deleteBtn:q('#deleteBtn'), labelToggle:q('#labelToggle'),
+    };
+
+    bind();
+    refreshAll();
+
+    function bind(){
+      q('#addBtn').onclick=()=>openModal();
+      q('#closeModal').onclick=closeModal;
+      q('#cancelBtn').onclick=closeModal;
+      q('#saveBtn').onclick=saveRecord;
+      els.deleteBtn.onclick=deleteRecord;
+      q('#prevRange').onclick=()=>{settings.offsetMonths-=3;persistSettings();renderTimeline();};
+      q('#nextRange').onclick=()=>{settings.offsetMonths+=3;persistSettings();renderTimeline();};
+      q('#todayBtn').onclick=()=>{settings.offsetMonths=0;persistSettings();renderTimeline();};
+      els.toggleMode.onclick=()=>{settings.mode=settings.mode==='week'?'day':'week';persistSettings();refreshAll();};
+      els.personFilter.onchange=e=>{settings.personFilter=e.target.value;persistSettings();renderTimeline();};
+      els.projectFilter.onchange=e=>{settings.projectFilter=e.target.value;persistSettings();renderTimeline();};
+      els.modal.addEventListener('click',e=>{if(e.target===els.modal) closeModal();});
+      els.labelToggle.onchange = e => {
+  settings.showProjectLabel = e.target.checked;
+  persistSettings();
+  renderTimeline();
+};
+      document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
+    }
+
+    function refreshAll(){
+      syncDerivedLists();
+      renderFilters();
+      renderLegend();
+      renderTimeline();
+      els.labelToggle.checked = settings.showProjectLabel !== false;
+      els.toggleMode.textContent='Modo: '+(settings.mode==='week'?'Semana':'Dia');
+    }
+
+    function syncDerivedLists(){
+      const peopleByIdMap = new Map(db.people.map(p=>[p.id,p]));
+      const peopleIdsFromRecords = new Set(db.records.map(r=>r.person).filter(p=>p));
+      const newIds = [...peopleIdsFromRecords].filter(id => !peopleByIdMap.has(id));
+      newIds.forEach(id => db.people.push({id, name:id}));
+      db.people = Array.from(new Map(db.people.map(p=>[p.id,p])).values());
+      const projectSet = new Set([...(db.projects||[]), ...db.records.map(r=>r.project)]);
+      db.projects = [...projectSet].sort();
+      if(settings && !db.people.some(p=>p.id===settings.personFilter)) settings.personFilter='';
+      persist();
+    }
+
+    function renderFilters(){
+      const personOptions = [...db.people.map(p=>({value:p.id, text:p.name}))];
+      fillSelect(els.personFilter, personOptions, settings.personFilter || '', 'Todas');
+      fillSelect(els.projectFilter,['',...db.projects],settings.projectFilter,'Todos');
+      fillSelect(els.fPerson, db.people.map(p=>({value:p.id, text:p.name})),'','Selecione');
+      fillSelect(els.fProject,db.projects,'','Selecione');
+    }
+
+    function renderLegend(){
+      els.legend.innerHTML='';
+      db.projects.forEach(p=>{
+        const chip=document.createElement('div');chip.className='chip';
+        chip.innerHTML=`<span class="dot" style="background:${projectColor(p)}"></span>${escapeHtml(p)}`;
+        els.legend.appendChild(chip);
+      });
+    }
+
+    function renderTimeline(){
+      const start = startOfDay(addMonths(new Date(), settings.offsetMonths));
+      const end = addMonths(start, 3);
+      const filtered = db.records.filter(r => (!settings.personFilter || r.person===settings.personFilter) && (!settings.projectFilter || r.project===settings.projectFilter));
+      const people = db.people.filter(p => filtered.some(r=>r.person===p.id));
+      const cols = settings.mode==='week' ? buildWeekCols(start,end) : buildDayCols(start,end);
+      const cellSize = settings.mode==='week' ? 84 : 42;
+
+      els.timeline.style.setProperty('--cell-size', cellSize + 'px');
+      els.timeline.innerHTML='';
+
+      const header = document.createElement('div');
+      header.className='header-row';
+      header.innerHTML=`<div class="sticky-left head-left">Pessoa</div><div class="head-grid" style="grid-template-columns:repeat(${cols.length},${cellSize}px)">${cols.map(c=>`
+  <div class="head-cell 
+    ${c.current ? 'current' : ''} 
+    ${c.isWeekend ? 'weekend' : ''}">
+    ${c.label}
+  </div>
+`).join('')}</div>`;
+      els.timeline.appendChild(header);
+
+      if(!people.length){
+        const empty=document.createElement('div');empty.className='empty';empty.textContent='Nenhum registro encontrado para os filtros atuais.';els.timeline.appendChild(empty);return;
+      }
+
+      people.forEach(person=>{
+        const row=document.createElement('div');row.className='person-row';
+        row.dataset.personId=person.id;
+        row.addEventListener('dragenter', onPersonDragEnter);
+        row.addEventListener('dragover', onPersonDragOver);
+        row.addEventListener('dragleave', onPersonDragLeave);
+        row.addEventListener('drop', onPersonDrop);
+        const meta=document.createElement('div');meta.className='sticky-left person-meta';meta.textContent=person.name;
+        meta.dataset.personId=person.id;
+        meta.draggable=true;
+        meta.addEventListener('dragstart', onPersonDragStart);
+        meta.addEventListener('dragend', onPersonDragEnd);
+        const grid=document.createElement('div');grid.className='grid-row';grid.style.width=(cols.length*cellSize)+'px';
+        cols.forEach((c, i) => {
+  if (c.isWeekend) {
+    const bg = document.createElement('div');
+    bg.style.position = 'absolute';
+    bg.style.left = (i * cellSize) + 'px';
+    bg.style.width = cellSize + 'px';
+    bg.style.top = 0;
+    bg.style.bottom = 0;
+    bg.style.background = 'rgba(148,163,184,0.08)';
+    bg.style.pointerEvents = 'none';
+    grid.appendChild(bg);
+  }
+});
+        const personRecords = filtered.filter(r=>r.person===person.id).sort((a,b)=>startOfDay(a.start)-startOfDay(b.start));
+        const levels = [];
+        personRecords.forEach(rec => {
+          const rs = startOfDay(rec.start);
+          const re = startOfDay(rec.end);
+          let levelIndex = levels.findIndex(lastEnd => rs > lastEnd);
+          if(levelIndex === -1){ levelIndex = levels.length; levels.push(re); }
+          else { levels[levelIndex] = re; }
+          rec._level = levelIndex;
+        });
+        const rowHeight = Math.max(54, 16 + levels.length * 38);
+        grid.style.minHeight = rowHeight + 'px';
+        meta.style.minHeight = rowHeight + 'px';
+        const currentCol = cols.findIndex(c=>c.current);
+        if(currentCol >= 0){
+          const marker = document.createElement('div');
+          marker.className='row-highlight';
+          marker.style.left=(currentCol*cellSize)+'px';
+          marker.style.width=cellSize+'px';
+          grid.appendChild(marker);
+        }
+        personRecords.forEach(rec=>{
+          const pos = computeBarPosition(rec, start, end, cellSize, settings.mode, cols);
+          if(!pos) return;
+          const bar=document.createElement('div');bar.className='bar';
+          bar.style.left=pos.left+'px';bar.style.width=Math.max(pos.width,cellSize*.9)+'px';
+          bar.style.top=(10 + rec._level*38)+'px';
+          bar.style.background=projectColor(rec.project);
+          if (settings.showProjectLabel !== false) {
+  bar.innerHTML = `${escapeHtml(rec.project)}<small>${escapeHtml(rec.scope || 'Sem escopo')}</small>`;
+} else {
+  bar.innerHTML = `${escapeHtml(rec.scope || 'Sem escopo')}`;
+}
+          bar.title=`${getPersonName(rec.person)}\n${rec.project}\n${rec.scope}\n${formatDateBR(rec.start)} até ${formatDateBR(rec.end)}`;
+          bar.addEventListener('pointerdown', e=>onBarPointerDown(e, rec, cols, start, end, cellSize, settings.mode));
+          bar.addEventListener('click', e=>{ if(bar.dataset.dragged==='true'){ e.stopPropagation(); e.preventDefault(); bar.dataset.dragged=''; return; } openModal(rec.id); });
+          const handle=document.createElement('div');
+          handle.className='resize-handle';
+          handle.addEventListener('pointerdown', e=>onBarResizePointerDown(e, rec, cols, start, end, cellSize, settings.mode));
+          bar.appendChild(handle);
+          grid.appendChild(bar);
+        });
+        row.append(meta,grid);els.timeline.appendChild(row);
+      });
+    }
+
+function buildDayCols(start,end){
+  const cols=[]; 
+  let d=new Date(start);
+  const today = startOfDay(new Date());
+
+  while(d<end){
+    const key = toISODate(d);
+    const day = d.getDay(); // 0 = domingo, 6 = sábado
+
+    cols.push({
+      key,
+      label:d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}),
+      current: d.getTime()===today.getTime(),
+      isWeekend: day === 0 || day === 6 // 👈 NOVO
+    });
+
+    d=addDays(d,1);
+  }
+  return cols;
+}
+
+    function buildWeekCols(start,end){
+      const cols=[]; let d=new Date(start);
+      const today = startOfDay(new Date());
+      d = startOfWeek(d);
+      while(d<end){
+        const weekStart = new Date(d);
+        const weekEnd = addDays(weekStart,4);
+        const label = `${weekStart.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}<br>${weekEnd.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}`;
+        const current = today >= weekStart && today <= weekEnd;
+        cols.push({key:toISODate(weekStart), label, current});
+        d=addDays(d,7);
+      }
+      return cols;
+    }
+
+    function computeBarPosition(rec, visibleStart, visibleEnd, cellSize, mode, cols=[]){
+      const rs = startOfDay(rec.start);
+      const re = startOfDay(rec.end);
+      const rangeEndExclusive = addDays(re, 1);
+      if(rangeEndExclusive <= visibleStart || rs >= visibleEnd) return null;
+
+      if(mode === 'day'){
+        const start = rs < visibleStart ? visibleStart : rs;
+        const end = rangeEndExclusive > visibleEnd ? visibleEnd : rangeEndExclusive;
+        const left = diffDays(visibleStart, start) * cellSize;
+        const width = diffDays(start, end) * cellSize - 8;
+        return { left, width: Math.max(width, cellSize * 0.9) };
+      }
+
+      if(!cols.length) return null;
+
+      const recStart = rs.getTime();
+      const recEnd = re.getTime();
+
+      const startCol = cols.findIndex(col => {
+        const colStart = startOfDay(col.key).getTime();
+        const colEnd = addDays(startOfDay(col.key), 4).getTime();
+        return recStart >= colStart && recStart <= colEnd;
+      });
+
+      const endCol = cols.findIndex(col => {
+        const colStart = startOfDay(col.key).getTime();
+        const colEnd = addDays(startOfDay(col.key), 4).getTime();
+        return recEnd >= colStart && recEnd <= colEnd;
+      });
+
+      let firstCol = startCol;
+      let lastCol = endCol;
+
+      if(firstCol === -1){
+        firstCol = cols.findIndex(col => startOfDay(col.key).getTime() > recStart);
+        if(firstCol === -1) firstCol = 0;
+      }
+
+      if(lastCol === -1){
+        for(let i = cols.length - 1; i >= 0; i--){
+          const colEnd = addDays(startOfDay(cols[i].key), 4).getTime();
+          if(colEnd < recEnd){
+            lastCol = i;
+            break;
+          }
+        }
+        if(lastCol === -1) lastCol = cols.length - 1;
+      }
+
+      if(lastCol < 0 || firstCol >= cols.length || lastCol < firstCol) return null;
+      const left = firstCol * cellSize;
+      const width = ((lastCol - firstCol + 1) * cellSize) - 8;
+      return { left, width: Math.max(width, cellSize * 0.9) };
+    }
+
+    function clearDropPreview(){
+      document.querySelectorAll('.person-row.drop-before, .person-row.drop-after').forEach(el=>{
+        el.classList.remove('drop-before','drop-after');
+      });
+    }
+
+    function getDropPosition(e, row){
+      const rect = row.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      return y < rect.height/2 ? 'before' : 'after';
+    }
+
+    function onPersonDragStart(e){
+      draggingPersonId = e.currentTarget.dataset.personId;
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain', draggingPersonId);
+      const row = e.currentTarget.closest('.person-row');
+      if(row) row.classList.add('dragging');
+    }
+
+    function onPersonDragEnter(e){
+      e.preventDefault();
+      if(!draggingPersonId) return;
+      const targetId = e.currentTarget.dataset.personId;
+      if(targetId === draggingPersonId) return;
+      dropPosition = getDropPosition(e, e.currentTarget);
+      clearDropPreview();
+      e.currentTarget.classList.add(dropPosition==='before' ? 'drop-before' : 'drop-after');
+    }
+
+    function onPersonDragOver(e){
+      e.preventDefault();
+      e.dataTransfer.dropEffect='move';
+      if(!draggingPersonId) return;
+      const targetId = e.currentTarget.dataset.personId;
+      if(targetId === draggingPersonId) return;
+      dropPosition = getDropPosition(e, e.currentTarget);
+      clearDropPreview();
+      e.currentTarget.classList.add(dropPosition==='before' ? 'drop-before' : 'drop-after');
+    }
+
+    function onPersonDragLeave(e){
+      if(!draggingPersonId) return;
+      e.currentTarget.classList.remove('drop-before','drop-after');
+    }
+
+    function onPersonDrop(e){
+      e.preventDefault();
+      const sourceId = e.dataTransfer.getData('text/plain');
+      const targetId = e.currentTarget.dataset.personId;
+      clearDropPreview();
+      if(!sourceId || sourceId === targetId) return;
+      const sourceIndex = db.people.findIndex(p=>p.id===sourceId);
+      let targetIndex = db.people.findIndex(p=>p.id===targetId);
+      if(sourceIndex === -1 || targetIndex === -1) return;
+      if(dropPosition === 'after') targetIndex++;
+      if(sourceIndex < targetIndex) targetIndex--;
+      const [item] = db.people.splice(sourceIndex,1);
+      db.people.splice(targetIndex,0,item);
+      persist();
+      refreshAll();
+    }
+
+    function onPersonDragEnd(e){
+      const row = e.currentTarget.closest('.person-row');
+      if(row) row.classList.remove('dragging');
+      draggingPersonId = null;
+      clearDropPreview();
+    }
+
+    function onBarResizePointerDown(e, rec, cols, visibleStart, visibleEnd, cellSize, mode){
+      e.preventDefault();
+      e.stopPropagation();
+      const bar = e.currentTarget.closest('.bar');
+      if(!bar) return;
+      const grid = bar.closest('.grid-row');
+      const rect = bar.getBoundingClientRect();
+      barInteraction = {
+        action:'resize',
+        rec,
+        cols,
+        visibleStart,
+        visibleEnd,
+        cellSize,
+        mode,
+        bar,
+        gridRect: grid.getBoundingClientRect(),
+        pointerOffset: e.clientX - rect.left,
+        dragged: false
+      };
+      bar.setPointerCapture(e.pointerId);
+      bar.classList.add('resizing');
+      document.body.style.cursor='ew-resize';
+      document.addEventListener('pointermove', onBarPointerMove);
+      document.addEventListener('pointerup', onBarPointerUp);
+      document.addEventListener('pointercancel', onBarPointerUp);
+    }
+
+    function onBarPointerDown(e, rec, cols, visibleStart, visibleEnd, cellSize, mode){
+      if(e.target.closest('.resize-handle')) return;
+      e.preventDefault();
+      const bar = e.currentTarget.closest('.bar');
+      if(!bar) return;
+      const grid = bar.closest('.grid-row');
+      const rs = startOfDay(rec.start);
+      const re = startOfDay(rec.end);
+      const duration = diffDays(rs, re) + 1;
+      const rect = bar.getBoundingClientRect();
+      barInteraction = {
+        action:'move',
+        rec,
+        cols,
+        visibleStart,
+        visibleEnd,
+        cellSize,
+        mode,
+        bar,
+        gridRect: grid.getBoundingClientRect(),
+        pointerOffset: e.clientX - rect.left,
+        originalDuration: duration,
+        dragged: false
+      };
+      bar.setPointerCapture(e.pointerId);
+      bar.classList.add('moving');
+      document.body.style.cursor='grabbing';
+      document.addEventListener('pointermove', onBarPointerMove);
+      document.addEventListener('pointerup', onBarPointerUp);
+      document.addEventListener('pointercancel', onBarPointerUp);
+    }
+
+    function getBarTargetDate(x, offset=0){
+      if(!barInteraction) return null;
+      const {gridRect, visibleStart, cols, cellSize, mode} = barInteraction;
+      const pointerX = Math.min(Math.max(x - offset, gridRect.left), gridRect.right);
+      const relative = pointerX - gridRect.left;
+      if(mode === 'day'){
+        const index = Math.round(relative / cellSize);
+        return addDays(visibleStart, Math.max(0, index));
+      }
+      const colIndex = Math.min(Math.max(Math.round(relative / cellSize), 0), cols.length - 1);
+      const weekStart = startOfDay(cols[colIndex].key);
+      return barInteraction && barInteraction.action==='resize' && mode === 'week' ? addDays(weekStart, 4) : weekStart;
+    }
+
+    function onBarPointerMove(e){
+      if(!barInteraction) return;
+      const {action, bar, rec, originalDuration, cellSize, mode, visibleStart, visibleEnd, cols} = barInteraction;
+      if(action === 'resize'){
+        const newDate = getBarTargetDate(e.clientX);
+        if(!newDate) return;
+        const preview = computeBarPosition({start:rec.start, end:toISODate(newDate)}, visibleStart, visibleEnd, cellSize, mode, cols);
+        if(preview){
+          bar.style.width = Math.max(preview.width, cellSize * 0.9) + 'px';
+          barInteraction.dragged = true;
+        }
+      } else {
+        const newStart = getBarTargetDate(e.clientX, barInteraction.pointerOffset);
+        if(!newStart) return;
+        const newEnd = addDays(newStart, originalDuration - 1);
+        const preview = computeBarPosition({start:toISODate(newStart), end:toISODate(newEnd)}, visibleStart, visibleEnd, cellSize, mode, cols);
+        if(preview){
+          bar.style.left = preview.left + 'px';
+          bar.style.width = Math.max(preview.width, cellSize * 0.9) + 'px';
+          barInteraction.dragged = true;
+        }
+      }
+    }
+
+    function onBarPointerUp(e){
+      if(!barInteraction) return;
+      const {action, rec, bar, originalDuration} = barInteraction;
+      const commit = getBarTargetDate(e.clientX, action === 'move' ? barInteraction.pointerOffset : 0);
+      if(commit){
+        if(action === 'resize'){
+          const minEnd = startOfDay(rec.start);
+          const snappedDate = commit.getTime() < minEnd.getTime() ? minEnd : commit;
+          const currentEnd = startOfDay(rec.end);
+          if(snappedDate.getTime() !== currentEnd.getTime()){
+            rec.end = toISODate(snappedDate);
+            persist();
+            refreshAll();
+          }
+        } else {
+          const newStart = commit;
+          const newEnd = addDays(newStart, originalDuration - 1);
+          const currentStart = startOfDay(rec.start);
+          const currentEnd = startOfDay(rec.end);
+          if(newStart.getTime() !== currentStart.getTime() || newEnd.getTime() !== currentEnd.getTime()){
+            rec.start = toISODate(newStart);
+            rec.end = toISODate(newEnd);
+            persist();
+            refreshAll();
+          }
+        }
+      }
+      if(barInteraction.dragged) bar.dataset.dragged='true';
+      bar.classList.remove(action === 'resize' ? 'resizing' : 'moving');
+      document.body.style.cursor='';
+      barInteraction = null;
+      document.removeEventListener('pointermove', onBarPointerMove);
+      document.removeEventListener('pointerup', onBarPointerUp);
+      document.removeEventListener('pointercancel', onBarPointerUp);
+    }
+
+    function openModal(id=null){
+      editingId=id; els.formMsg.textContent='';
+      const personOptions = db.people.map(p=>({value:p.id, text:p.name}));
+      fillSelect(els.fPerson, personOptions, '', 'Selecione');
+      fillSelect(els.fProject, [{value:'', text:'Selecione'}, ...db.projects.map(p=>({value:p, text:p}))], '', '');
+      if(id){
+        const r=db.records.find(x=>x.id===id); if(!r) return;
+        els.modalTitle.textContent='Editar registro';
+        els.fPerson.value=r.person; els.fProject.value=r.project; els.fStart.value=r.start; els.fEnd.value=r.end; els.fScope.value=r.scope||'';
+        els.deleteBtn.style.display='inline';
+      } else {
+        els.modalTitle.textContent='Novo registro';
+        els.fPerson.value=''; els.fProject.value=''; els.fStart.value=toISODate(new Date()); els.fEnd.value=toISODate(new Date()); els.fScope.value='';
+        els.deleteBtn.style.display='none';
+      }
+      els.modal.classList.add('open');
+    }
+
+    function closeModal(){ els.modal.classList.remove('open'); }
+
+    function saveRecord(){
+      const payload={ person:els.fPerson.value, project:els.fProject.value, start:els.fStart.value, end:els.fEnd.value, scope:els.fScope.value.trim() };
+      const err=validate(payload); if(err){ els.formMsg.textContent=err; return; }
+      if(editingId){
+        const i=db.records.findIndex(x=>x.id===editingId); if(i>-1) db.records[i]={...db.records[i],...payload};
+      } else db.records.push({id:id(),...payload});
+      persist(); refreshAll(); closeModal();
+    }
+
+    function deleteRecord(){
+      if(!editingId) return;
+      db.records = db.records.filter(r=>r.id!==editingId);
+      persist(); refreshAll(); closeModal();
+    }
+
+    function validate(v){
+      if(!v.person) return 'Selecione uma pessoa.';
+      if(!v.project) return 'Selecione um projeto.';
+      if(!v.start || !v.end) return 'Preencha início e fim.';
+      if(startOfDay(v.start) > startOfDay(v.end)) return 'A data de início não pode ser maior que a data de fim.';
+      return '';
+    }
+
+    function fillSelect(el, values, selected='', placeholder=''){
+      el.innerHTML='';
+      if(placeholder!==undefined){ const o=document.createElement('option');o.value='';o.textContent=placeholder;el.appendChild(o); }
+      values.filter((v,i,a)=>v!=='' && (typeof v === 'string' ? a.indexOf(v)===i : a.findIndex(x=>x.value===v.value)===i)).forEach(v=>{
+        const o=document.createElement('option');
+        if(typeof v === 'string'){
+          o.value=v;o.textContent=v;
+        } else {
+          o.value=v.value;o.textContent=v.text;
+        }
+        el.appendChild(o);
+      });
+      el.value=selected || '';
+    }
+
+    function projectColor(name){ return db.projectColors[name] || colorFromString(name); }
+    function persist(){ setDoc(doc(firestore, 'timeline', 'data'), db); }
+    function persistSettings(){ localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
+    function loadLocal(key,fallback){ try{ return JSON.parse(localStorage.getItem(key)) || fallback; }catch{return fallback;} }
+    function q(s){ return document.querySelector(s); }
+    function id(){ return Math.random().toString(36).slice(2,10); }
+    function addDays(d,n){ const x=startOfDay(d); x.setDate(x.getDate()+n); return startOfDay(x); }
+    function addMonths(d,n){ const x=new Date(startOfDay(d)); x.setMonth(x.getMonth()+n); return x; }
+    function startOfDay(d){ const x = typeof d === 'string' ? new Date(d+'T00:00:00') : new Date(d); x.setHours(0,0,0,0); return x; }
+    function startOfWeek(d){ const x = startOfDay(d); const day = x.getDay(); const diff = (day + 6) % 7; x.setDate(x.getDate() - diff); return startOfDay(x); }
+    function diffDays(a,b){ return Math.round((startOfDay(b)-startOfDay(a))/86400000); }
+    function toISODate(d){ return startOfDay(new Date(d)).toISOString().slice(0,10); }
+    function offsetDate(n){ return toISODate(addDays(new Date(),n)); }
+    function formatDateBR(s){ return new Date(s+'T00:00:00').toLocaleDateString('pt-BR'); }
+    function escapeHtml(s=''){ return s.replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+    function colorFromString(str=''){ let h=0; for(let i=0;i<str.length;i++) h=str.charCodeAt(i)+((h<<5)-h); return `hsl(${Math.abs(h)%360} 70% 45%)`; }
+  </script>
+</body>
+</html>
