@@ -279,26 +279,30 @@
     { mode:'week', offsetMonths:0, personFilter:'', projectFilter:'',  showProjectLabel: true
  };
 
-    let db = defaultData; // Carregará do arquivo
+    let db = null; // Carregará do arquivo
+    let hasLoadedFromFirestore  = false;
     let settings = loadLocal(SETTINGS_KEY, defaultSettings);
-    settings.personFilter = '';
+    //settings.personFilter = '';
     let editingId = null;
     let barInteraction = null;
     let draggingPersonId = null;
     let dropPosition = 'after';
 
     // Carregar dados compartilhados em tempo real
-    onSnapshot(doc(firestore, 'timeline', 'data'), (docSnap) => {
-      if (docSnap.exists()) {
-        db = docSnap.data();
-      } else {
-        db = defaultData;
-      }
-      normalizeData();
-      refreshAll();
-    });
+      onSnapshot(doc(firestore, 'timeline', 'data'), (docSnap) => {
+        if (docSnap.exists()) {
+          db = docSnap.data();
+        } else {
+          db = structuredClone(defaultData);
+        }
 
-    normalizeData();
+        hasLoadedFromFirestore = true;
+
+        normalizeData();
+        refreshAll(); // 👈 TEM que rodar aqui
+      });
+
+     
 
     function normalizeData(){
       db.people = (db.people||[]).map(p => typeof p === 'string' ? {id:slug(p), name:p} : p);
@@ -334,7 +338,7 @@
     };
 
     bind();
-    refreshAll();
+    
 
     function bind(){
       q('#addBtn').onclick=()=>openModal();
@@ -372,10 +376,13 @@
       const newIds = [...peopleIdsFromRecords].filter(id => !peopleByIdMap.has(id));
       newIds.forEach(id => db.people.push({id, name:id}));
       db.people = Array.from(new Map(db.people.map(p=>[p.id,p])).values());
+
       const projectSet = new Set([...(db.projects||[]), ...db.records.map(r=>r.project)]);
       db.projects = [...projectSet].sort();
+
       if(settings && !db.people.some(p=>p.id===settings.personFilter)) settings.personFilter='';
-      persist();
+
+       
     }
 
     function renderFilters(){
