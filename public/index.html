@@ -204,6 +204,42 @@
   border-radius: 8px;
   font-size: 12px;
 }
+
+.accordions-area{
+  margin-top:16px;
+  display:grid;
+  gap:12px;
+}
+.accordion-panel{
+  overflow:hidden;
+  border-radius:16px;
+}
+.accordion-summary{
+  list-style:none;
+  padding:16px 18px;
+  display:grid;
+  grid-template-columns:1fr auto 24px;
+  align-items:center;
+  gap:12px;
+  cursor:pointer;
+  font-weight:800;
+}
+.accordion-summary::-webkit-details-marker{display:none}
+.accordion-title{font-size:16px}
+.accordion-count{justify-self:center;color:var(--muted);font-size:13px;font-weight:600}
+.accordion-arrow{color:var(--muted);transition:.2s ease;font-size:16px;line-height:1}
+details[open] .accordion-arrow{transform:rotate(180deg)}
+.accordion-content{border-top:1px solid var(--line2);padding:16px 18px 18px}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.section-head p{margin:0;color:var(--muted);font-size:15px}
+.compact-list{display:grid;gap:10px;max-height:300px;overflow:auto;padding-right:4px}
+.list-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 12px;border:1px solid var(--line2);border-radius:12px;background:#f8fafc}
+.list-main{min-width:0;display:flex;flex-direction:column;gap:5px}
+.list-title{font-weight:800;font-size:14px;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-sub{font-size:12px;color:#64748b}
+.list-actions{display:flex;gap:8px;flex-shrink:0}
+.btn-icon{width:38px;height:38px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);background:#fff;border-radius:10px;font-size:14px}
+.btn-icon-danger{color:#b91c1c;border-color:#fecaca}.empty-list{padding:18px;border:1px dashed var(--line);border-radius:12px;background:#f8fafc;color:var(--muted);font-size:13px}.person-modal-msg{font-size:12px;color:#dc2626;min-height:16px}
     @media (max-width:900px){:root{--sidebar-w:180px}.dialog-body{grid-template-columns:1fr}.topbar,.toolbar{align-items:stretch}.actions,.filters{width:100%}.filters .field,.actions button{flex:1}}
   </style>
 </head>
@@ -248,28 +284,37 @@
     <div class="panel timeline-wrap">
       <div class="timeline" id="timeline"></div>
     </div>
-    <!---- ATIVIDADES -->
-<div class="panel activities-panel">
-  <h2>Atividades</h2>
+    <div class="accordions-area">
+      <details class="panel accordion-panel" id="activitiesAccordion">
+        <summary class="accordion-summary">
+          <span class="accordion-title">Atividades</span>
+          <span class="accordion-count" id="activitiesCount">0 registros</span>
+          <span class="accordion-arrow">⌄</span>
+        </summary>
+        <div class="accordion-content">
+          <div class="section-head">
+            <p>Lista dos registros cadastrados, usando os mesmos filtros da timeline.</p>
+            <button class="btn-primary" id="addActivityFromTable">+ Nova atividade</button>
+          </div>
+          <div class="compact-list" id="activitiesList"></div>
+        </div>
+      </details>
 
-  <div class="activities-table-wrap">
-    <table id="activitiesTable">
-      <thead>
-        <tr>
-          
-          <th>Pessoa</th>
-          <th>Projeto</th>
-          <th>Início</th>
-          <th>Fim</th>
-          <th>Escopo</th>
-          <th>Editar</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
-</div>
-    <!---- ATIVIDADES -->
+      <details class="panel accordion-panel" id="peopleAccordion">
+        <summary class="accordion-summary">
+          <span class="accordion-title">Pessoas</span>
+          <span class="accordion-count" id="peopleCount">0 pessoas</span>
+          <span class="accordion-arrow">⌄</span>
+        </summary>
+        <div class="accordion-content">
+          <div class="section-head">
+            <p>Gerencie a lista usada nos filtros, no cadastro e nas linhas da timeline.</p>
+            <button class="btn-primary" id="addPersonBtn">+ Nova pessoa</button>
+          </div>
+          <div class="compact-list" id="peopleList"></div>
+        </div>
+      </details>
+    </div>
   </div>
 
   <div class="modal" id="modal">
@@ -313,7 +358,31 @@
     </div>
   </div>
 
-  <script type="module">
+
+
+  <div class="modal" id="personModal">
+    <div class="dialog">
+      <div class="dialog-head">
+        <h3 id="personModalTitle">Nova pessoa</h3>
+        <button class="btn-soft" id="closePersonModal">Fechar</button>
+      </div>
+      <div class="dialog-body">
+        <div class="field full">
+          <label>Nome da pessoa</label>
+          <input id="personNameInput" type="text" placeholder="Digite o nome" />
+        </div>
+        <div class="full person-modal-msg" id="personFormMsg"></div>
+      </div>
+      <div class="dialog-foot">
+        <div></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn-soft" id="cancelPersonBtn">Cancelar</button>
+          <button class="btn-primary" id="savePersonBtn">Salvar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+\n  <script type="module">
     // Import the functions you need from the SDKs you need
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
     import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
@@ -394,6 +463,7 @@
     let settings = loadLocal(SETTINGS_KEY, defaultSettings);
     //settings.personFilter = '';
     let editingId = null;
+    let editingPersonId = null;
     let barInteraction = null;
     let draggingPersonId = null;
     let dropPosition = 'after';
@@ -444,7 +514,7 @@
     const els = {
       timeline: q('#timeline'), legend:q('#legend'), modal:q('#modal'), modalTitle:q('#modalTitle'), formMsg:q('#formMsg'),
       personFilter:q('#personFilter'), projectFilter:q('#projectFilter'), toggleMode:q('#toggleMode'),
-      fPerson:q('#fPerson'), fProject:q('#fProject'), fStart:q('#fStart'), fEnd:q('#fEnd'), fScope:q('#fScope'), deleteBtn:q('#deleteBtn'), labelToggle:q('#labelToggle'),activitiesTableBody: q('#activitiesTable tbody'),
+      fPerson:q('#fPerson'), fProject:q('#fProject'), fStart:q('#fStart'), fEnd:q('#fEnd'), fScope:q('#fScope'), deleteBtn:q('#deleteBtn'), labelToggle:q('#labelToggle'),activitiesList:q('#activitiesList'), activitiesCount:q('#activitiesCount'), peopleList:q('#peopleList'), peopleCount:q('#peopleCount'), personModal:q('#personModal'), personModalTitle:q('#personModalTitle'), personNameInput:q('#personNameInput'), personFormMsg:q('#personFormMsg'),
     };
 
     bind();
@@ -452,6 +522,11 @@
 
     function bind(){
       q('#addBtn').onclick=()=>openModal();
+      q('#addActivityFromTable').onclick=()=>openModal();
+      q('#addPersonBtn').onclick=()=>openPersonModal();
+      q('#closePersonModal').onclick=closePersonModal;
+      q('#cancelPersonBtn').onclick=closePersonModal;
+      q('#savePersonBtn').onclick=savePerson;
       q('#closeModal').onclick=closeModal;
       q('#cancelBtn').onclick=closeModal;
       q('#saveBtn').onclick=saveRecord;
@@ -502,6 +577,7 @@ function scrollTodayIntoView() {
       els.personFilter.onchange=e=>{settings.personFilter=e.target.value;persistSettings();refreshAll();};
       els.projectFilter.onchange=e=>{settings.projectFilter=e.target.value;persistSettings();refreshAll();};
       els.modal.addEventListener('click',e=>{if(e.target===els.modal) closeModal();});
+      els.personModal.addEventListener('click',e=>{if(e.target===els.personModal) closePersonModal();});
       els.labelToggle.onchange = e => {
   settings.showProjectLabel = e.target.checked;
   persistSettings();
@@ -516,6 +592,7 @@ function scrollTodayIntoView() {
       renderLegend();
       renderTimeline();
         renderActivitiesTable();
+      renderPeopleTable();
 
       els.labelToggle.checked = settings.showProjectLabel !== false;
       els.toggleMode.textContent='Modo: '+(settings.mode==='week'?'Semana':'Dia');
@@ -1010,47 +1087,119 @@ function buildDayCols(start,end){
     }
 
    function renderActivitiesTable() {
-  if (!els.activitiesTableBody || !db || !Array.isArray(db.records)) return;
+  if (!els.activitiesList || !db || !Array.isArray(db.records)) return;
 
   const filtered = db.records.filter(r =>
     (!settings.personFilter || r.person === settings.personFilter) &&
     (!settings.projectFilter || r.project === settings.projectFilter)
   );
 
-  els.activitiesTableBody.innerHTML = '';
+  els.activitiesCount.textContent = `${filtered.length} registro${filtered.length === 1 ? '' : 's'}`;
+  els.activitiesList.innerHTML = '';
 
   if (!filtered.length) {
-    els.activitiesTableBody.innerHTML = `
-      <tr>
-        <td colspan="6" class="muted">Nenhuma atividade encontrada para os filtros atuais.</td>
-      </tr>
-    `;
+    els.activitiesList.innerHTML = `<div class="empty-list">Nenhuma atividade encontrada para os filtros atuais.</div>`;
     return;
   }
 
-  filtered
-    .slice()
-    .sort((a, b) => startOfDay(a.start) - startOfDay(b.start))
-    .forEach(rec => {
-      const tr = document.createElement('tr');
-
-      tr.innerHTML = `
-        
-        <td>${escapeHtml(getPersonName(rec.person))}</td>
-        <td>${escapeHtml(rec.project || '')}</td>
-        <td>${formatDateBR(rec.start)}</td>
-        <td>${formatDateBR(rec.end)}</td>
-        <td>${escapeHtml(rec.scope || '')}</td>
-        <td>
-          <button class="btn-table-edit" data-id="${rec.id}">Editar</button>
-        </td>
-      `;
-
-      tr.querySelector('.btn-table-edit').onclick = () => openModal(rec.id);
-
-      els.activitiesTableBody.appendChild(tr);
-    });
+  filtered.slice().sort((a, b) => startOfDay(a.start) - startOfDay(b.start)).forEach(rec => {
+    const item = document.createElement('div');
+    item.className = 'list-item';
+    item.innerHTML = `
+      <div class="list-main">
+        <div class="list-title">${escapeHtml(rec.scope || 'Sem escopo')}</div>
+        <div class="list-sub">${escapeHtml(getPersonName(rec.person))} · ${escapeHtml(rec.project || '')} · ${formatDateBR(rec.start)} até ${formatDateBR(rec.end)}</div>
+      </div>
+      <div class="list-actions"><button class="btn-icon" title="Editar atividade" data-id="${rec.id}">✎</button></div>
+    `;
+    item.querySelector('.btn-icon').onclick = () => openModal(rec.id);
+    els.activitiesList.appendChild(item);
+  });
 }
+
+function renderPeopleTable(){
+  if(!els.peopleList || !db || !Array.isArray(db.people)) return;
+  els.peopleCount.textContent = `${db.people.length} pessoa${db.people.length === 1 ? '' : 's'}`;
+  els.peopleList.innerHTML = '';
+  if(!db.people.length){
+    els.peopleList.innerHTML = `<div class="empty-list">Nenhuma pessoa cadastrada.</div>`;
+    return;
+  }
+  db.people.forEach(person => {
+    const linkedCount = db.records.filter(r => r.person === person.id).length;
+    const item = document.createElement('div');
+    item.className = 'list-item';
+    item.innerHTML = `
+      <div class="list-main">
+        <div class="list-title">${escapeHtml(person.name || '')}</div>
+        <div class="list-sub">${linkedCount} atividade${linkedCount === 1 ? '' : 's'} vinculada${linkedCount === 1 ? '' : 's'}</div>
+      </div>
+      <div class="list-actions">
+        <button class="btn-icon" title="Renomear pessoa" data-action="edit" data-id="${person.id}">✎</button>
+        <button class="btn-icon btn-icon-danger" title="Remover pessoa" data-action="delete" data-id="${person.id}">×</button>
+      </div>
+    `;
+    item.querySelector('[data-action="edit"]').onclick = () => openPersonModal(person.id);
+    item.querySelector('[data-action="delete"]').onclick = () => deletePerson(person.id);
+    els.peopleList.appendChild(item);
+  });
+}
+
+function openPersonModal(personId=null){
+  editingPersonId = personId;
+  els.personFormMsg.textContent = '';
+  if(personId){
+    const person = db.people.find(p => p.id === personId);
+    if(!person) return;
+    els.personModalTitle.textContent = 'Renomear pessoa';
+    els.personNameInput.value = person.name || '';
+  } else {
+    els.personModalTitle.textContent = 'Nova pessoa';
+    els.personNameInput.value = '';
+  }
+  els.personModal.classList.add('open');
+  setTimeout(() => els.personNameInput.focus(), 50);
+}
+
+function closePersonModal(){
+  els.personModal.classList.remove('open');
+}
+
+function savePerson(){
+  const name = els.personNameInput.value.trim();
+  if(!name){ els.personFormMsg.textContent = 'Informe o nome da pessoa.'; return; }
+  if(editingPersonId){
+    const person = db.people.find(p => p.id === editingPersonId);
+    if(person) person.name = name;
+  } else {
+    let newId = slug(name);
+    if(!newId) newId = id();
+    let finalId = newId;
+    let i = 2;
+    while(db.people.some(p => p.id === finalId)){ finalId = `${newId}-${i++}`; }
+    db.people.push({id:finalId, name});
+  }
+  persist();
+  refreshAll();
+  closePersonModal();
+}
+
+function deletePerson(personId){
+  const person = db.people.find(p => p.id === personId);
+  if(!person) return;
+  const linkedCount = db.records.filter(r => r.person === personId).length;
+  if(linkedCount > 0){
+    alert(`Não é possível remover ${person.name}, pois existem ${linkedCount} atividade${linkedCount === 1 ? '' : 's'} vinculada${linkedCount === 1 ? '' : 's'} a essa pessoa.`);
+    return;
+  }
+  if(!confirm(`Remover ${person.name} da lista de pessoas?`)) return;
+  db.people = db.people.filter(p => p.id !== personId);
+  if(settings.personFilter === personId) settings.personFilter = '';
+  persist();
+  persistSettings();
+  refreshAll();
+}
+
     function projectColor(name){ return db.projectColors[name] || colorFromString(name); }
     function persist(){ setDoc(doc(firestore, 'timeline', 'data'), db); }
     function persistSettings(){ localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
