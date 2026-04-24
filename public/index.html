@@ -123,6 +123,87 @@
 .switch input:checked + .slider:before{
   transform:translateX(20px);
 }
+.table-wrap {
+  margin-top: 24px;
+  overflow-x: auto;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+#activitiesTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+#activitiesTable th,
+#activitiesTable td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+}
+
+#activitiesTable th {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+}
+
+#activitiesTable td[contenteditable="true"] {
+  cursor: text;
+}
+
+#activitiesTable td[contenteditable="true"]:focus {
+  outline: 2px solid #93c5fd;
+  background: #eff6ff;
+}
+.activities-panel {
+  margin-top: 16px;
+  padding: 16px;
+}
+
+.activities-panel h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.activities-table-wrap {
+  overflow-x: auto;
+}
+
+#activitiesTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+#activitiesTable th,
+#activitiesTable td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line2);
+  text-align: left;
+  vertical-align: top;
+}
+
+#activitiesTable th {
+  background: #f8fafc;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+#activitiesTable tr:hover td {
+  background: #f8fafc;
+}
+
+.btn-table-edit {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  font-size: 12px;
+}
     @media (max-width:900px){:root{--sidebar-w:180px}.dialog-body{grid-template-columns:1fr}.topbar,.toolbar{align-items:stretch}.actions,.filters{width:100%}.filters .field,.actions button{flex:1}}
   </style>
 </head>
@@ -134,8 +215,9 @@
         <p>Visão clean por pessoa, projeto, escopo e período. Dados compartilhados na nuvem via Firebase.</p>
       </div>
       <div class="actions">
-        <button class="btn-soft" id="prevRange">← 3 meses</button>
-        <button class="btn-soft" id="nextRange">3 meses →</button>
+        <button class="btn-soft" id="prevRange">← 1 mês</button>
+        <button class="btn-soft" id="nextRange">1 mês →</button>
+        <button class="btn-soft" id="resetRange" title="Voltar para os 3 meses iniciais">↺</button>
         <button class="btn-soft" id="todayBtn">Hoje</button>
         <button class="btn-ghost" id="toggleMode">Modo: Semana</button>
         <button class="btn-primary" id="addBtn">+ Novo registro</button>
@@ -166,6 +248,28 @@
     <div class="panel timeline-wrap">
       <div class="timeline" id="timeline"></div>
     </div>
+    <!---- ATIVIDADES -->
+<div class="panel activities-panel">
+  <h2>Atividades</h2>
+
+  <div class="activities-table-wrap">
+    <table id="activitiesTable">
+      <thead>
+        <tr>
+          
+          <th>Pessoa</th>
+          <th>Projeto</th>
+          <th>Início</th>
+          <th>Fim</th>
+          <th>Escopo</th>
+          <th>Editar</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+    <!---- ATIVIDADES -->
   </div>
 
   <div class="modal" id="modal">
@@ -275,9 +379,15 @@
       ]
     };
 
-    const defaultSettings = 
-    { mode:'week', offsetMonths:0, personFilter:'', projectFilter:'',  showProjectLabel: true
- };
+    const defaultSettings = {
+      mode: 'week',
+      monthsBefore: 0,
+      monthsAfter: 3,
+      personFilter: '',
+      projectFilter: '',
+      showProjectLabel: true
+    };
+ 
 
     let db = null; // Carregará do arquivo
     let hasLoadedFromFirestore  = false;
@@ -334,7 +444,7 @@
     const els = {
       timeline: q('#timeline'), legend:q('#legend'), modal:q('#modal'), modalTitle:q('#modalTitle'), formMsg:q('#formMsg'),
       personFilter:q('#personFilter'), projectFilter:q('#projectFilter'), toggleMode:q('#toggleMode'),
-      fPerson:q('#fPerson'), fProject:q('#fProject'), fStart:q('#fStart'), fEnd:q('#fEnd'), fScope:q('#fScope'), deleteBtn:q('#deleteBtn'), labelToggle:q('#labelToggle'),
+      fPerson:q('#fPerson'), fProject:q('#fProject'), fStart:q('#fStart'), fEnd:q('#fEnd'), fScope:q('#fScope'), deleteBtn:q('#deleteBtn'), labelToggle:q('#labelToggle'),activitiesTableBody: q('#activitiesTable tbody'),
     };
 
     bind();
@@ -346,12 +456,51 @@
       q('#cancelBtn').onclick=closeModal;
       q('#saveBtn').onclick=saveRecord;
       els.deleteBtn.onclick=deleteRecord;
-      q('#prevRange').onclick=()=>{settings.offsetMonths-=3;persistSettings();renderTimeline();};
-      q('#nextRange').onclick=()=>{settings.offsetMonths+=3;persistSettings();renderTimeline();};
-      q('#todayBtn').onclick=()=>{settings.offsetMonths=0;persistSettings();renderTimeline();};
+      q('#prevRange').onclick = () => {
+  settings.monthsBefore = (settings.monthsBefore || 0) + 1;
+  persistSettings();
+  refreshAll();
+};
+
+q('#nextRange').onclick = () => {
+  settings.monthsAfter = (settings.monthsAfter || 3) + 1;
+  persistSettings();
+  refreshAll();
+};
+
+q('#todayBtn').onclick = () => {
+  scrollTodayIntoView();
+};
+q('#resetRange').onclick = () => {
+  settings.monthsBefore = 0;
+  settings.monthsAfter = 3;
+  persistSettings();
+  refreshAll();
+
+  setTimeout(() => {
+    scrollTodayIntoView();
+  }, 50);
+};
+function scrollTodayIntoView() {
+  const wrap = document.querySelector('.timeline-wrap');
+  const current = document.querySelector('.head-cell.current');
+
+  if (!wrap || !current) return;
+
+  const wrapRect = wrap.getBoundingClientRect();
+  const currentRect = current.getBoundingClientRect();
+
+  const currentOffset = currentRect.left - wrapRect.left + wrap.scrollLeft;
+  const targetScroll = currentOffset - (wrap.clientWidth / 2) + (current.offsetWidth / 2);
+
+  wrap.scrollTo({
+    left: Math.max(0, targetScroll),
+    behavior: 'smooth'
+  });
+}
       els.toggleMode.onclick=()=>{settings.mode=settings.mode==='week'?'day':'week';persistSettings();refreshAll();};
-      els.personFilter.onchange=e=>{settings.personFilter=e.target.value;persistSettings();renderTimeline();};
-      els.projectFilter.onchange=e=>{settings.projectFilter=e.target.value;persistSettings();renderTimeline();};
+      els.personFilter.onchange=e=>{settings.personFilter=e.target.value;persistSettings();refreshAll();};
+      els.projectFilter.onchange=e=>{settings.projectFilter=e.target.value;persistSettings();refreshAll();};
       els.modal.addEventListener('click',e=>{if(e.target===els.modal) closeModal();});
       els.labelToggle.onchange = e => {
   settings.showProjectLabel = e.target.checked;
@@ -366,6 +515,8 @@
       renderFilters();
       renderLegend();
       renderTimeline();
+        renderActivitiesTable();
+
       els.labelToggle.checked = settings.showProjectLabel !== false;
       els.toggleMode.textContent='Modo: '+(settings.mode==='week'?'Semana':'Dia');
     }
@@ -403,15 +554,19 @@
     }
 
     function renderTimeline(){
-      const start = startOfDay(addMonths(new Date(), settings.offsetMonths));
-      const end = addMonths(start, 3);
+      const today = startOfDay(new Date());
+      const start = addMonths(today, -(settings.monthsBefore || 0));
+      const end = addMonths(today, settings.monthsAfter || 3);
       const filtered = db.records.filter(r => (!settings.personFilter || r.person===settings.personFilter) && (!settings.projectFilter || r.project===settings.projectFilter));
       const people = db.people.filter(p => filtered.some(r=>r.person===p.id));
       const cols = settings.mode==='week' ? buildWeekCols(start,end) : buildDayCols(start,end);
       const cellSize = settings.mode==='week' ? 84 : 42;
+      const timelineWidth = 240 + (cols.length * cellSize);
 
+      els.timeline.style.width = timelineWidth + 'px';
       els.timeline.style.setProperty('--cell-size', cellSize + 'px');
       els.timeline.innerHTML='';
+ 
 
       const header = document.createElement('div');
       header.className='header-row';
@@ -854,6 +1009,48 @@ function buildDayCols(start,end){
       el.value=selected || '';
     }
 
+   function renderActivitiesTable() {
+  if (!els.activitiesTableBody || !db || !Array.isArray(db.records)) return;
+
+  const filtered = db.records.filter(r =>
+    (!settings.personFilter || r.person === settings.personFilter) &&
+    (!settings.projectFilter || r.project === settings.projectFilter)
+  );
+
+  els.activitiesTableBody.innerHTML = '';
+
+  if (!filtered.length) {
+    els.activitiesTableBody.innerHTML = `
+      <tr>
+        <td colspan="6" class="muted">Nenhuma atividade encontrada para os filtros atuais.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  filtered
+    .slice()
+    .sort((a, b) => startOfDay(a.start) - startOfDay(b.start))
+    .forEach(rec => {
+      const tr = document.createElement('tr');
+
+      tr.innerHTML = `
+        
+        <td>${escapeHtml(getPersonName(rec.person))}</td>
+        <td>${escapeHtml(rec.project || '')}</td>
+        <td>${formatDateBR(rec.start)}</td>
+        <td>${formatDateBR(rec.end)}</td>
+        <td>${escapeHtml(rec.scope || '')}</td>
+        <td>
+          <button class="btn-table-edit" data-id="${rec.id}">Editar</button>
+        </td>
+      `;
+
+      tr.querySelector('.btn-table-edit').onclick = () => openModal(rec.id);
+
+      els.activitiesTableBody.appendChild(tr);
+    });
+}
     function projectColor(name){ return db.projectColors[name] || colorFromString(name); }
     function persist(){ setDoc(doc(firestore, 'timeline', 'data'), db); }
     function persistSettings(){ localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
